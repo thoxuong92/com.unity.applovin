@@ -1,0 +1,20 @@
+﻿{
+    "name": "Unity.AppLovin.Editor",
+    "rootNamespace": "Unity.AppLovin.Editor",
+    "references": [
+        "Unity.Core",
+        "Unity.AppLovin",
+        "Unity.Core.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

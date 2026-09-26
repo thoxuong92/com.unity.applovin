@@ -1,0 +1,26 @@
+### C#
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio cache/options directory
+.vs/
+
+# User-specific files
+*.suo
+*.user
+
+# Debug symbols
+*.pdb
+
+# .NET build artifacts
+artifacts/
+
+# Publish output
+publish/
+
+### Windows
+Thumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk

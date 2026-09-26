@@ -1,0 +1,8 @@
+<linker>
+  <assembly fullname="MaxSdk" preserve="all"/>
+  <assembly fullname="MaxSdk.Scripts" preserve="all"/>
+  <assembly fullname="MaxSdkCallbacks" preserve="all"/>
+  <assembly fullname="AppLovinMax" preserve="all"/>
+  <assembly fullname="WASD.AppLovin" preserve="all"/>
+  <assembly fullname="WASD.AppLovin.Editor" preserve="all"/>
+</linker>

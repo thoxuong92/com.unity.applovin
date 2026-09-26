@@ -1,0 +1,35 @@
+﻿{
+  "name": "com.unity.applovin",
+  "version": "1.0.0",
+  "displayName": "Unity AppLovin MAX Service",
+  "description": "AppLovin MAX Mediation Ads Service Adapter with Mediation Network Setup and Auto-Integration for Unity Core Framework.",
+  "unity": "2021.3",
+  "keywords": [
+    "unity",
+    "ads",
+    "applovin",
+    "max",
+    "mediation",
+    "rewarded",
+    "interstitial",
+    "banner",
+    "app-open"
+  ],
+  "author": {
+    "name": "thoxuong92",
+    "url": "https://github.com/thoxuong92"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thoxuong92/com.unity.applovin.git"
+  },
+  "dependencies": {
+    "com.unity.core": "1.0.0"
+  },
+  "samples": [
+    {
+      "displayName": "Test ads",
+      "path": "Samples~/Test ads"
+    }
+  ]
+}
