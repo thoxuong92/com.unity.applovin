@@ -1,4 +1,4 @@
-﻿# Unity AppLovin MAX Service (UPM Package)
+# Unity AppLovin MAX Service (UPM Package)
 
 Package module tích hợp giải pháp trung gian quảng cáo (**Mediation Ads Service**) từ **AppLovin MAX** (hỗ trợ Google AdMob, Unity Ads, Mintegral, IronSource, Vungle, InMobi,...) cho **Unity Core Framework**.
 
@@ -74,4 +74,5 @@ AdsService.ShowRewarded("free_coins", (rewardReceived) => {
 ---
 
 ## 👨‍💻 Tác Giả & Bản Quyền
+- **Tác giả**: **joukyuu**
 - **Repository**: [thoxuong92/com.unity.applovin](https://github.com/thoxuong92/com.unity.applovin.git)
