@@ -23,6 +23,8 @@ namespace Unity.AppLovin
         private bool _isInitialized;
         public bool IsInitialized => _isInitialized;
 
+        public bool CanShowBanner => _isInitialized && !string.IsNullOrEmpty(Config?.BannerId);
+
         private bool _isInterstitialReady;
         public bool CanShowInterstitial => _isInitialized && (_hasMaxSdk ? CheckInterstitialReady() : _isInterstitialReady);
 
@@ -466,7 +468,7 @@ namespace Unity.AppLovin
                 if (createBanner != null)
                 {
                     Type posType = _maxSdkType.Assembly.GetType("MaxSdkBase+BannerPosition");
-                    object posVal = posType != null ? Enum.ToObject(posType, (int)Config.BannerPos) : 1;
+                    object posVal = posType != null ? Enum.ToObject(posType, (int)Config.BannerPosition) : 1;
                     createBanner.Invoke(null, new object[] { Config.BannerId, posVal });
                 }
             }
