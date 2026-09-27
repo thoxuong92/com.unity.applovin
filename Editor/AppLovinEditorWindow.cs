@@ -126,7 +126,7 @@ namespace Unity.AppLovin.Editor
                     Directory.CreateDirectory(targetDir);
                 }
 
-                string srcFile = Path.GetFullPath("Packages/com.unity.applovin/LibAar~/ads_resource.aar"); if (!File.Exists(srcFile)) srcFile = Path.Combine(Application.dataPath, "wasd", "Packages", "com.wasd.applovin", "LibAar~", "ads_resource.aar");
+                string srcFile = Path.GetFullPath("Packages/com.unity.applovin/LibAar~/ads_resource.aar"); 
                 string dstFile = Path.Combine(targetDir, "ads_resource.aar");
 
                 if (File.Exists(srcFile))
