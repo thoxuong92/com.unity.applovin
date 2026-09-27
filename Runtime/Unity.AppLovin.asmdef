@@ -1,4 +1,4 @@
-﻿{
+{
     "name": "Unity.AppLovin",
     "rootNamespace": "Unity.AppLovin",
     "references": [
@@ -11,6 +11,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.applovin.mediation.ads",
+            "expression": "",
+            "define": "APPLOVIN_MAX_ENABLED"
+        }
+    ],
     "noEngineReferences": false
 }
