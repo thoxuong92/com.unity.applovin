@@ -30,6 +30,7 @@ namespace Unity.AppLovin
         public string BannerId = "";
         public string InterstitialId = "";
         public string RewardedId = "";
+        public string MrecId = "";
         public BannerPosition BannerPosition = BannerPosition.BottomCenter;
         public BannerColor BannerColor = BannerColor.NoColor;
 
@@ -49,6 +50,7 @@ namespace Unity.AppLovin
                     config.BannerId = ExtractJsonValue(text, "Banner", "BannerId");
                     config.InterstitialId = ExtractJsonValue(text, "Interstitial", "InterstitialId");
                     config.RewardedId = ExtractJsonValue(text, "Rewarded", "RewardedId");
+                    config.MrecId = ExtractJsonValue(text, "MREC", "MRec", "MrecId");
 
                     string posStr = ExtractJsonValue(text, "BannerPosition");
                     if (!string.IsNullOrEmpty(posStr) && Enum.TryParse<BannerPosition>(posStr, true, out var pos))

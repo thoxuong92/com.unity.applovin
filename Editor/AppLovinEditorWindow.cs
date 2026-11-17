@@ -19,6 +19,7 @@ namespace Unity.AppLovin.Editor
         private string _bannerId = "";
         private string _interstitialId = "";
         private string _rewardedId = "";
+        private string _mrecId = "";
         private BannerPosition _bannerPos = BannerPosition.BottomCenter;
         private string _targetExportPath = "Assets/Resources/Info.json";
         private Vector2 _scrollPos;
@@ -49,6 +50,7 @@ namespace Unity.AppLovin.Editor
                     _bannerId = ExtractValue(json, "Banner", "BannerId");
                     _interstitialId = ExtractValue(json, "Interstitial", "InterstitialId");
                     _rewardedId = ExtractValue(json, "Rewarded", "RewardedId");
+                    _mrecId = ExtractValue(json, "MREC", "MRec", "MrecId");
                 }
             }
             catch (Exception ex)
@@ -95,6 +97,7 @@ namespace Unity.AppLovin.Editor
             _bannerId = EditorGUILayout.TextField("Banner Ad Unit ID:", _bannerId);
             _interstitialId = EditorGUILayout.TextField("Interstitial Ad Unit ID:", _interstitialId);
             _rewardedId = EditorGUILayout.TextField("Rewarded Ad Unit ID:", _rewardedId);
+            _mrecId = EditorGUILayout.TextField("MREC Ad Unit ID:", _mrecId);
             _bannerPos = (BannerPosition)EditorGUILayout.EnumPopup("Vị trí Banner mặc định:", _bannerPos);
 
             EditorGUILayout.Space(4);
@@ -163,6 +166,7 @@ namespace Unity.AppLovin.Editor
                 sb.AppendLine($"  \"Banner\": \"{_bannerId}\",");
                 sb.AppendLine($"  \"Interstitial\": \"{_interstitialId}\",");
                 sb.AppendLine($"  \"Rewarded\": \"{_rewardedId}\",");
+                sb.AppendLine($"  \"MREC\": \"{_mrecId}\",");
                 sb.AppendLine($"  \"BannerPosition\": \"{_bannerPos}\"");
                 sb.AppendLine("}");
 

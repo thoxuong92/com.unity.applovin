@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -16,23 +17,50 @@ namespace Unity.AppLovin
     /// gửi Impression-level Revenue (ILRD) sang TrackingService/AnalyticsService,
     /// và cung cấp cơ chế Mock an toàn khi test trong Unity Editor hoặc chưa cài package AppLovin MAX.
     /// </summary>
-    public class AppLovinAdsAdapter : IAdsService
+    public class AppLovinAdsAdapter : IAdsService, IAdsMrec, IAdsBannerLayout
     {
         public AppLovinConfig Config { get; private set; }
 
         private bool _isInitialized;
         public bool IsInitialized => _isInitialized;
 
-        public bool CanShowBanner => _isInitialized && !string.IsNullOrEmpty(Config?.BannerId);
+        /// <summary>Chế độ giả: chưa có MAX SDK, chưa có SDK Key, hoặc khởi tạo lỗi (mọi loại quảng cáo dùng bản giả của core).</summary>
+        private bool _mock;
+
+        public bool CanShowBanner => _isInitialized && (_mock || !string.IsNullOrEmpty(Config?.BannerId));
 
         private bool _isInterstitialReady;
-        public bool CanShowInterstitial => _isInitialized && (_hasMaxSdk ? CheckInterstitialReady() : _isInterstitialReady);
+        public bool CanShowInterstitial => _isInitialized && (!_mock ? CheckInterstitialReady() : _isInterstitialReady);
 
         private bool _isRewardedReady;
-        public bool CanShowRewarded => _isInitialized && (_hasMaxSdk ? CheckRewardedReady() : _isRewardedReady);
+        public bool CanShowRewarded => _isInitialized && (!_mock ? CheckRewardedReady() : _isRewardedReady);
 
         private bool _isAppOpenReady;
-        public bool CanShowAppOpen => _isInitialized && (_hasMaxSdk ? CheckAppOpenReady() : _isAppOpenReady);
+        public bool CanShowAppOpen => _isInitialized && (!_mock ? CheckAppOpenReady() : _isAppOpenReady);
+
+        // MREC: created at the first ShowMrec (it needs a place), moved with UpdateMRecPosition after that
+        public bool CanShowMrec => _isInitialized && (_mock || !string.IsNullOrEmpty(Config?.MrecId));
+        private bool _mrecCreated, _mrecWanted;
+        private Rect _mrecRect;
+        private bool _bannerCreated, _bannerWanted;
+
+        /// <summary>Chiều cao banner MAX (pixel): 50 dp, 90 dp trên máy tính bảng; 0 khi chưa có SDK (AdsService tự tính).</summary>
+        public float BannerHeightPx
+        {
+            get
+            {
+                if (!_hasMaxSdk) return 0f;
+                var utils = _maxSdkType.Assembly.GetType("MaxSdkUtils");
+                bool tablet = AdsService.IsTablet;
+                try
+                {
+                    var isTablet = utils?.GetMethod("IsTablet", Type.EmptyTypes);
+                    if (isTablet != null) tablet = (bool)isTablet.Invoke(null, null);
+                }
+                catch (Exception) { /* keep AdsService's guess */ }
+                return (tablet ? 90f : 50f) * Density();
+            }
+        }
 
         private Action _interstitialCallback;
         private Action<bool> _rewardedCallback;
@@ -63,6 +91,7 @@ namespace Unity.AppLovin
             {
                 AppLogger.LogWarning("[AppLovinAdsAdapter] Không tìm thấy SDK Key trong cấu hình Info.json. Chạy ở chế độ Mock.");
                 _isInitialized = true;
+                _mock = true;
                 _isInterstitialReady = true;
                 _isRewardedReady = true;
                 _isAppOpenReady = true;
@@ -77,6 +106,7 @@ namespace Unity.AppLovin
             {
                 AppLogger.LogWarning("[AppLovinAdsAdapter] Chưa tìm thấy MaxSdk assembly. Tự động chuyển sang chế độ Mock.");
                 _isInitialized = true;
+                _mock = true;
                 _isInterstitialReady = true;
                 _isRewardedReady = true;
                 _isAppOpenReady = true;
@@ -127,6 +157,7 @@ namespace Unity.AppLovin
             {
                 AppLogger.LogError($"[AppLovinAdsAdapter] Lỗi khởi tạo MaxSdk: {ex.Message}. Chuyển sang chế độ Mock.");
                 _isInitialized = true;
+                _mock = true;
                 _isInterstitialReady = true;
                 _isRewardedReady = true;
                 _isAppOpenReady = true;
@@ -142,6 +173,7 @@ namespace Unity.AppLovin
             RequestRewarded();
             RequestAppOpen();
             RequestBanner();
+            if (_mrecWanted) ShowMrec("pending", _mrecRect);
         }
 
         private void BindCallbacks()
@@ -172,6 +204,13 @@ namespace Unity.AppLovin
             if (bannerCallbacks != null)
             {
                 BindEvent(bannerCallbacks, "OnAdRevenuePaidEvent", nameof(OnAdRevenuePaid));
+            }
+
+            // Bind MREC Events
+            Type mrecCallbacks = _maxCallbacksType.GetNestedType("MRec") ?? Type.GetType("MaxSdkCallbacks+MRec, MaxSdk.Scripts");
+            if (mrecCallbacks != null)
+            {
+                BindEvent(mrecCallbacks, "OnAdRevenuePaidEvent", nameof(OnAdRevenuePaid));
             }
 
             // Bind AppOpen Events
@@ -339,9 +378,10 @@ namespace Unity.AppLovin
         #region Ads Control Interface
         public void ShowBanner(string placement = "")
         {
+            _bannerWanted = true;
             if (string.IsNullOrEmpty(Config?.BannerId)) return;
 
-            if (_hasMaxSdk)
+            if (_hasMaxSdk && _bannerCreated)
             {
                 _maxSdkType.GetMethod("ShowBanner", new[] { typeof(string) })?.Invoke(null, new object[] { Config.BannerId });
             }
@@ -350,6 +390,7 @@ namespace Unity.AppLovin
 
         public void HideBanner()
         {
+            _bannerWanted = false;
             if (string.IsNullOrEmpty(Config?.BannerId)) return;
 
             if (_hasMaxSdk)
@@ -364,17 +405,17 @@ namespace Unity.AppLovin
             _interstitialCallback = onClosed;
             AppLogger.Log($"[AppLovinAdsAdapter] Show Interstitial | Placement: {placement}");
 
-            if (_hasMaxSdk && CheckInterstitialReady())
+            if (!_mock && CheckInterstitialReady())
             {
                 _maxSdkType.GetMethod("ShowInterstitial", new[] { typeof(string) })?.Invoke(null, new object[] { Config.InterstitialId });
             }
             else
             {
-                // Fallback Mock
+                // Fallback Mock (quảng cáo giả có hình trong Editor)
                 _isInterstitialReady = false;
                 var cb = _interstitialCallback;
                 _interstitialCallback = null;
-                cb?.Invoke();
+                MockAdsVisual.ShowFullscreen("INTERSTITIAL", AdsService.Settings.MockInterstitialSeconds, false, _ => cb?.Invoke());
                 RequestInterstitial();
             }
         }
@@ -384,17 +425,17 @@ namespace Unity.AppLovin
             _rewardedCallback = onReward;
             AppLogger.Log($"[AppLovinAdsAdapter] Show Rewarded | Placement: {placement}");
 
-            if (_hasMaxSdk && CheckRewardedReady())
+            if (!_mock && CheckRewardedReady())
             {
                 _maxSdkType.GetMethod("ShowRewardedAd", new[] { typeof(string) })?.Invoke(null, new object[] { Config.RewardedId });
             }
             else
             {
-                // Fallback Mock
+                // Fallback Mock (quảng cáo giả có hình trong Editor: đóng sớm thì không có thưởng)
                 _isRewardedReady = false;
                 var cb = _rewardedCallback;
                 _rewardedCallback = null;
-                cb?.Invoke(true);
+                MockAdsVisual.ShowFullscreen("REWARDED VIDEO", AdsService.Settings.MockRewardedSeconds, true, earned => cb?.Invoke(earned));
                 RequestRewarded();
             }
         }
@@ -404,23 +445,24 @@ namespace Unity.AppLovin
             _appOpenCallback = onClosed;
             AppLogger.Log($"[AppLovinAdsAdapter] Show App Open | Placement: {placement}");
 
-            if (_hasMaxSdk && CheckAppOpenReady())
+            if (!_mock && CheckAppOpenReady())
             {
                 _maxSdkType.GetMethod("ShowAppOpenAd", new[] { typeof(string) })?.Invoke(null, new object[] { Config.AppOpenId });
             }
             else
             {
-                // Fallback Mock
+                // Fallback Mock (quảng cáo giả có hình trong Editor)
                 _isAppOpenReady = false;
                 var cb = _appOpenCallback;
                 _appOpenCallback = null;
-                cb?.Invoke();
+                MockAdsVisual.ShowFullscreen("APP OPEN AD", AdsService.Settings.MockAppOpenSeconds, false, _ => cb?.Invoke());
                 RequestAppOpen();
             }
         }
 
         private void RequestInterstitial()
         {
+            if (_mock) { _isInterstitialReady = true; return; }
             if (string.IsNullOrEmpty(Config?.InterstitialId)) return;
             if (_hasMaxSdk)
             {
@@ -434,6 +476,7 @@ namespace Unity.AppLovin
 
         private void RequestRewarded()
         {
+            if (_mock) { _isRewardedReady = true; return; }
             if (string.IsNullOrEmpty(Config?.RewardedId)) return;
             if (_hasMaxSdk)
             {
@@ -447,6 +490,7 @@ namespace Unity.AppLovin
 
         private void RequestAppOpen()
         {
+            if (_mock) { _isAppOpenReady = true; return; }
             if (string.IsNullOrEmpty(Config?.AppOpenId)) return;
             if (_hasMaxSdk)
             {
@@ -463,15 +507,107 @@ namespace Unity.AppLovin
             if (string.IsNullOrEmpty(Config?.BannerId)) return;
             if (_hasMaxSdk)
             {
-                // MaxSdk.CreateBanner(Config.BannerId, BannerPosition.BottomCenter)
-                var createBanner = _maxSdkType.GetMethod("CreateBanner", new[] { typeof(string), typeof(Enum) });
-                if (createBanner != null)
+                try
                 {
-                    Type posType = _maxSdkType.Assembly.GetType("MaxSdkBase+BannerPosition");
-                    object posVal = posType != null ? Enum.ToObject(posType, (int)Config.BannerPosition) : 1;
-                    createBanner.Invoke(null, new object[] { Config.BannerId, posVal });
+                    string pos = Config.BannerPosition.ToString();
+                    // MAX 6-7: CreateBanner(string, BannerPosition) — the position by its name (the enums differ in order)
+                    var byEnum = FindMaxMethod("CreateBanner", 2, ps => ps[1].ParameterType.IsEnum);
+                    if (byEnum != null)
+                    {
+                        byEnum.Invoke(null, new object[] { Config.BannerId, Enum.Parse(byEnum.GetParameters()[1].ParameterType, pos) });
+                        _bannerCreated = true;
+                    }
+                    else
+                    {
+                        // MAX 8: CreateBanner(string, AdViewConfiguration(AdViewPosition))
+                        var byConfig = FindMaxMethod("CreateBanner", 2, ps => ps[1].ParameterType.Name == "AdViewConfiguration");
+                        var ctor = byConfig?.GetParameters()[1].ParameterType.GetConstructors()
+                            .FirstOrDefault(c => c.GetParameters().Length == 1 && c.GetParameters()[0].ParameterType.IsEnum);
+                        if (ctor != null)
+                        {
+                            var config = ctor.Invoke(new[] { Enum.Parse(ctor.GetParameters()[0].ParameterType, pos) });
+                            byConfig.Invoke(null, new object[] { Config.BannerId, config });
+                            _bannerCreated = true;
+                        }
+                    }
+                    if (!_bannerCreated) AppLogger.LogWarning("[AppLovinAdsAdapter] Không tìm thấy MaxSdk.CreateBanner phù hợp.");
+                    else if (_bannerWanted) ShowBanner(AdsService.ActiveBannerPlacement);
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.LogError($"[AppLovinAdsAdapter] CreateBanner: {ex.Message}");
                 }
             }
+        }
+
+        public void ShowMrec(string placement, Rect screenRectPx)
+        {
+            _mrecWanted = true;
+            _mrecRect = screenRectPx;
+            AppLogger.Log($"[AppLovinAdsAdapter] Show MREC | Placement: {placement} | {screenRectPx}");
+            if (!_hasMaxSdk || !_isInitialized || string.IsNullOrEmpty(Config?.MrecId)) return;
+            try
+            {
+                // MAX places ad views in dp from the top-left corner
+                float d = Density(), x = screenRectPx.x / d, y = screenRectPx.y / d;
+                string id = Config.MrecId;
+                if (!_mrecCreated)
+                {
+                    var byXY = FindMaxMethod("CreateMRec", 3, ps => ps[1].ParameterType == typeof(float));
+                    if (byXY != null) byXY.Invoke(null, new object[] { id, x, y });
+                    else
+                    {
+                        // MAX 8: CreateMRec(string, AdViewConfiguration(float x, float y))
+                        var byConfig = FindMaxMethod("CreateMRec", 2, ps => ps[1].ParameterType.Name == "AdViewConfiguration");
+                        if (byConfig == null) { AppLogger.LogWarning("[AppLovinAdsAdapter] Không tìm thấy MaxSdk.CreateMRec."); return; }
+                        var config = Activator.CreateInstance(byConfig.GetParameters()[1].ParameterType, new object[] { x, y });
+                        byConfig.Invoke(null, new object[] { id, config });
+                    }
+                    _mrecCreated = true;
+                }
+                else
+                {
+                    FindMaxMethod("UpdateMRecPosition", 3, ps => ps[1].ParameterType == typeof(float))?.Invoke(null, new object[] { id, x, y });
+                }
+                _maxSdkType.GetMethod("ShowMRec", new[] { typeof(string) })?.Invoke(null, new object[] { id });
+            }
+            catch (Exception ex)
+            {
+                AppLogger.LogError($"[AppLovinAdsAdapter] ShowMrec: {ex.Message}");
+            }
+        }
+
+        public void HideMrec()
+        {
+            _mrecWanted = false;
+            AppLogger.Log("[AppLovinAdsAdapter] Hide MREC");
+            if (!_hasMaxSdk || !_mrecCreated || string.IsNullOrEmpty(Config?.MrecId)) return;
+            _maxSdkType.GetMethod("HideMRec", new[] { typeof(string) })?.Invoke(null, new object[] { Config.MrecId });
+        }
+
+        /// <summary>Pixel cho mỗi dp, theo MaxSdkUtils.GetScreenDensity (AdsService.ScreenDensity nếu không có).</summary>
+        private float Density()
+        {
+            try
+            {
+                var m = _maxSdkType?.Assembly.GetType("MaxSdkUtils")?.GetMethod("GetScreenDensity", Type.EmptyTypes);
+                if (m != null) return Mathf.Max(0.5f, Convert.ToSingle(m.Invoke(null, null)));
+            }
+            catch (Exception) { /* below */ }
+            return AdsService.ScreenDensity;
+        }
+
+        /// <summary>A public static MaxSdk method by name, its number of parameters and their types.</summary>
+        private MethodInfo FindMaxMethod(string name, int count, Func<ParameterInfo[], bool> match)
+        {
+            if (_maxSdkType == null) return null;
+            foreach (var m in _maxSdkType.GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (m.Name != name) continue;
+                var ps = m.GetParameters();
+                if (ps.Length == count && match(ps)) return m;
+            }
+            return null;
         }
 
         private bool CheckInterstitialReady()
