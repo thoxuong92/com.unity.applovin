@@ -70,6 +70,7 @@ namespace Unity.AppLovin
         private int _retryCountRewarded;
         private int _retryCountAppOpen;
 
+        private bool _initStarted;
         private bool _hasMaxSdk;
         private Type _maxSdkType;
         private Type _maxCallbacksType;
@@ -82,6 +83,9 @@ namespace Unity.AppLovin
 
         public void Initialize()
         {
+            // (AdsService.Register gọi, rồi ServiceRegistry.Register gọi lần nữa: khởi tạo hai lần thì mỗi callback chạy hai lần)
+            if (_initStarted) return;
+            _initStarted = true;
             AppLogger.Log("[AppLovinAdsAdapter] Khởi tạo AppLovin MAX Service...");
             Config = AppLovinConfig.LoadFromResources();
 
@@ -146,12 +150,13 @@ namespace Unity.AppLovin
                 BindCallbacks();
 
                 // MaxSdk.SetSdkKey(Config.SdkKey);
-                var setKeyMethod = _maxSdkType.GetMethod("SetSdkKey", new[] { typeof(string) });
-                setKeyMethod?.Invoke(null, new object[] { Config.SdkKey });
+                CallMax("SetSdkKey", Config.SdkKey);
+                // (bản development: log đầy đủ của MAX trong logcat, tag AppLovinSdk)
+                if (Debug.isDebugBuild) CallMax("SetVerboseLogging", true);
 
-                // MaxSdk.InitializeSdk();
-                var initMethod = _maxSdkType.GetMethod("InitializeSdk", Type.EmptyTypes);
-                initMethod?.Invoke(null, null);
+                // MaxSdk.InitializeSdk(string[] adUnitIds = null): MAX 8 có tham số tùy chọn
+                if (CallMax("InitializeSdk") == null)
+                    AppLogger.LogError("[AppLovinAdsAdapter] Không tìm thấy MaxSdk.InitializeSdk.");
             }
             catch (Exception ex)
             {
@@ -383,7 +388,7 @@ namespace Unity.AppLovin
 
             if (_hasMaxSdk && _bannerCreated)
             {
-                _maxSdkType.GetMethod("ShowBanner", new[] { typeof(string) })?.Invoke(null, new object[] { Config.BannerId });
+                CallMax("ShowBanner", Config.BannerId);
             }
             AppLogger.Log($"[AppLovinAdsAdapter] Show Banner | Placement: {placement}");
         }
@@ -395,7 +400,7 @@ namespace Unity.AppLovin
 
             if (_hasMaxSdk)
             {
-                _maxSdkType.GetMethod("HideBanner", new[] { typeof(string) })?.Invoke(null, new object[] { Config.BannerId });
+                CallMax("HideBanner", Config.BannerId);
             }
             AppLogger.Log("[AppLovinAdsAdapter] Hide Banner");
         }
@@ -407,7 +412,15 @@ namespace Unity.AppLovin
 
             if (!_mock && CheckInterstitialReady())
             {
-                _maxSdkType.GetMethod("ShowInterstitial", new[] { typeof(string) })?.Invoke(null, new object[] { Config.InterstitialId });
+                CallMax("ShowInterstitial", Config.InterstitialId, placement);
+            }
+            else if (!_mock)
+            {
+                // SDK thật chưa có quảng cáo: không hiện gì, tải lại
+                var cb = _interstitialCallback;
+                _interstitialCallback = null;
+                cb?.Invoke();
+                RequestInterstitial();
             }
             else
             {
@@ -427,7 +440,15 @@ namespace Unity.AppLovin
 
             if (!_mock && CheckRewardedReady())
             {
-                _maxSdkType.GetMethod("ShowRewardedAd", new[] { typeof(string) })?.Invoke(null, new object[] { Config.RewardedId });
+                CallMax("ShowRewardedAd", Config.RewardedId, placement);
+            }
+            else if (!_mock)
+            {
+                // SDK thật chưa có quảng cáo: không có thưởng, tải lại
+                var cb = _rewardedCallback;
+                _rewardedCallback = null;
+                cb?.Invoke(false);
+                RequestRewarded();
             }
             else
             {
@@ -447,7 +468,15 @@ namespace Unity.AppLovin
 
             if (!_mock && CheckAppOpenReady())
             {
-                _maxSdkType.GetMethod("ShowAppOpenAd", new[] { typeof(string) })?.Invoke(null, new object[] { Config.AppOpenId });
+                CallMax("ShowAppOpenAd", Config.AppOpenId, placement);
+            }
+            else if (!_mock)
+            {
+                // SDK thật chưa có quảng cáo: không hiện gì, tải lại
+                var cb = _appOpenCallback;
+                _appOpenCallback = null;
+                cb?.Invoke();
+                RequestAppOpen();
             }
             else
             {
@@ -466,7 +495,7 @@ namespace Unity.AppLovin
             if (string.IsNullOrEmpty(Config?.InterstitialId)) return;
             if (_hasMaxSdk)
             {
-                _maxSdkType.GetMethod("LoadInterstitial", new[] { typeof(string) })?.Invoke(null, new object[] { Config.InterstitialId });
+                CallMax("LoadInterstitial", Config.InterstitialId);
             }
             else
             {
@@ -480,7 +509,7 @@ namespace Unity.AppLovin
             if (string.IsNullOrEmpty(Config?.RewardedId)) return;
             if (_hasMaxSdk)
             {
-                _maxSdkType.GetMethod("LoadRewardedAd", new[] { typeof(string) })?.Invoke(null, new object[] { Config.RewardedId });
+                CallMax("LoadRewardedAd", Config.RewardedId);
             }
             else
             {
@@ -494,7 +523,7 @@ namespace Unity.AppLovin
             if (string.IsNullOrEmpty(Config?.AppOpenId)) return;
             if (_hasMaxSdk)
             {
-                _maxSdkType.GetMethod("LoadAppOpenAd", new[] { typeof(string) })?.Invoke(null, new object[] { Config.AppOpenId });
+                CallMax("LoadAppOpenAd", Config.AppOpenId);
             }
             else
             {
@@ -569,7 +598,7 @@ namespace Unity.AppLovin
                 {
                     FindMaxMethod("UpdateMRecPosition", 3, ps => ps[1].ParameterType == typeof(float))?.Invoke(null, new object[] { id, x, y });
                 }
-                _maxSdkType.GetMethod("ShowMRec", new[] { typeof(string) })?.Invoke(null, new object[] { id });
+                CallMax("ShowMRec", id);
             }
             catch (Exception ex)
             {
@@ -582,7 +611,7 @@ namespace Unity.AppLovin
             _mrecWanted = false;
             AppLogger.Log("[AppLovinAdsAdapter] Hide MREC");
             if (!_hasMaxSdk || !_mrecCreated || string.IsNullOrEmpty(Config?.MrecId)) return;
-            _maxSdkType.GetMethod("HideMRec", new[] { typeof(string) })?.Invoke(null, new object[] { Config.MrecId });
+            CallMax("HideMRec", Config.MrecId);
         }
 
         /// <summary>Pixel cho mỗi dp, theo MaxSdkUtils.GetScreenDensity (AdsService.ScreenDensity nếu không có).</summary>
@@ -597,15 +626,42 @@ namespace Unity.AppLovin
             return AdsService.ScreenDensity;
         }
 
-        /// <summary>A public static MaxSdk method by name, its number of parameters and their types.</summary>
-        private MethodInfo FindMaxMethod(string name, int count, Func<ParameterInfo[], bool> match)
+        /// <summary>
+        /// Gọi một hàm public static của MaxSdk theo tên với các đối số đã cho; các tham số tùy chọn phía sau lấy giá trị
+        /// mặc định (MAX 8: InitializeSdk(string[] = null), ShowInterstitial(string, string = null, string = null)...).
+        /// Trả về kết quả của hàm, hoặc null khi không có hàm hợp.
+        /// </summary>
+        private object CallMax(string name, params object[] args)
         {
             if (_maxSdkType == null) return null;
-            foreach (var m in _maxSdkType.GetMethods(BindingFlags.Public | BindingFlags.Static))
+            foreach (var m in _maxSdkType.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy))
             {
                 if (m.Name != name) continue;
                 var ps = m.GetParameters();
-                if (ps.Length == count && match(ps)) return m;
+                if (ps.Length < args.Length) continue;
+                bool ok = true;
+                for (int i = 0; i < ps.Length && ok; i++)
+                {
+                    if (i < args.Length) ok = args[i] == null ? !ps[i].ParameterType.IsValueType : ps[i].ParameterType.IsInstanceOfType(args[i]);
+                    else ok = ps[i].IsOptional;
+                }
+                if (!ok) continue;
+                var full = new object[ps.Length];
+                for (int i = 0; i < ps.Length; i++) full[i] = i < args.Length ? args[i] : ps[i].DefaultValue;
+                return m.Invoke(null, full) ?? true;
+            }
+            return null;
+        }
+
+        /// <summary>A public static MaxSdk method by name, its number of parameters (-1: any) and their types.</summary>
+        private MethodInfo FindMaxMethod(string name, int count, Func<ParameterInfo[], bool> match)
+        {
+            if (_maxSdkType == null) return null;
+            foreach (var m in _maxSdkType.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy))
+            {
+                if (m.Name != name) continue;
+                var ps = m.GetParameters();
+                if ((count < 0 || ps.Length == count) && match(ps)) return m;
             }
             return null;
         }
@@ -613,22 +669,19 @@ namespace Unity.AppLovin
         private bool CheckInterstitialReady()
         {
             if (!_hasMaxSdk || string.IsNullOrEmpty(Config?.InterstitialId)) return false;
-            var m = _maxSdkType.GetMethod("IsInterstitialReady", new[] { typeof(string) });
-            return m != null && (bool)m.Invoke(null, new object[] { Config.InterstitialId });
+            return CallMax("IsInterstitialReady", Config.InterstitialId) is bool ready && ready;
         }
 
         private bool CheckRewardedReady()
         {
             if (!_hasMaxSdk || string.IsNullOrEmpty(Config?.RewardedId)) return false;
-            var m = _maxSdkType.GetMethod("IsRewardedAdReady", new[] { typeof(string) });
-            return m != null && (bool)m.Invoke(null, new object[] { Config.RewardedId });
+            return CallMax("IsRewardedAdReady", Config.RewardedId) is bool ready && ready;
         }
 
         private bool CheckAppOpenReady()
         {
             if (!_hasMaxSdk || string.IsNullOrEmpty(Config?.AppOpenId)) return false;
-            var m = _maxSdkType.GetMethod("IsAppOpenAdReady", new[] { typeof(string) });
-            return m != null && (bool)m.Invoke(null, new object[] { Config.AppOpenId });
+            return CallMax("IsAppOpenAdReady", Config.AppOpenId) is bool ready && ready;
         }
         #endregion
     }

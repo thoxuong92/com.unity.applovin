@@ -1,7 +1,7 @@
-﻿<linker>
-  <assembly fullname="MaxSdk" preserve="all"/>
-  <assembly fullname="MaxSdk.Scripts" preserve="all"/>
-  <assembly fullname="MaxSdkCallbacks" preserve="all"/>
-  <assembly fullname="AppLovinMax" preserve="all"/>
-  <assembly fullname="Unity.AppLovin" preserve="all"/>
+<linker>
+  <assembly fullname="MaxSdk" ignoreIfMissing="1" preserve="all"/>
+  <assembly fullname="MaxSdk.Scripts" ignoreIfMissing="1" preserve="all"/>
+  <assembly fullname="MaxSdkCallbacks" ignoreIfMissing="1" preserve="all"/>
+  <assembly fullname="AppLovinMax" ignoreIfMissing="1" preserve="all"/>
+  <assembly fullname="Unity.AppLovin" ignoreIfMissing="1" preserve="all"/>
 </linker>
